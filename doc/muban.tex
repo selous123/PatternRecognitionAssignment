@@ -58,6 +58,8 @@
 %abreast
 \usepackage{subfigure}
 
+%math
+\usepackage{upgreek}
 \renewcommand{\thefigure}{\thesection.\arabic{figure}} % set caption label style to 1.A
 
 %\setCJKmainfont[BoldFont=SimHei]{SimSun}%设置\rmfamily
@@ -146,8 +148,49 @@ Iris也称鸢尾花卉数据集，是一类多重变量分析的数据集。通�
 	高斯模型就是用高斯概率密度函数（正态分布曲线）精确地量化事物，将一个事物分解为若干的基于高斯概率密度函数（正态分布曲线）形成的模型。
 
 \section{实验结果}
+\textbf{实验环境}:python2.7,pytorch0.4.0,scikit-learn0.19
+
+\textbf{实验数据}:mnist,iris
+
+\textbf{实验方法}:cnn,capsule,k-means,GMM
 \subsection{分类算法实验}
+\subsubsection{convolution neural network}
+
+\subsubsection{capsule}
 \subsection{聚类算法实验}
+\subsubsection{k-means}
+\textbf{实验描述：}
+实验使用k-means对iris数据集进行聚类实验，其中利用训练集类标的先验知识，对样本中心进行初始化加速expectation maximization算法的收敛
+
+\textbf{实验步骤：}
+\begin{enumerate}
+\item 初始化样本中心，３维
+\item 根据平方损失函数，计算距离，将数据分成３－簇
+\item 根据上一步的结果，更新样本中心
+\item 回到第二步，直到簇不在发生变化为止 
+\end{enumerate}
+
+\textbf{实验结果(可视化23特征)：}
+\begin{figure}[htbp]
+	\centering\includegraphics[scale=1.1]{knn_iris}
+	\caption{knn在iris数据集上的结果}
+\end{figure}
+\subsubsection{GMM}
+\textbf{实验描述：}
+实验使用高斯混合模型对数据进行聚类分析，同样使用训练集的先验知识，对模型参数进行初始化，将数据分成3/4训练集,1/4测试集，选择不同的初始化协方差形式.
+
+\textbf{实验步骤:}
+\begin{enumerate}
+\item 初始化高斯模型均值$\upmu_k$(根据样本标签先验计算均值初始化)，协方差$\Sigma_k$(spherical,diagonal,tied,full)以及比例$\pi_k$(1/3)
+\item 根据优化目标(极大化似然函数)，求导后可求出$\gamma(Z_{mk})$,表示样本ｍ属于ｋ类的概率
+\item 根据$\gamma(Z_{mk})$的值更新$\upmu_k,\Sigma_k,\pi_k$
+\item 重复23步骤，直到小于更新阈值为止
+\end{enumerate}
+\textbf{实验结果:}
+\begin{figure}[htbp]
+	\centering\includegraphics[scale=1.1]{gmm_iris}
+	\caption{gmm在iris数据集上的结果}
+\end{figure}
 \bibliography{reference}
 
 \end{document}
