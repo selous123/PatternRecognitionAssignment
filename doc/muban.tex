@@ -65,7 +65,7 @@
 %\setCJKmainfont[BoldFont=SimHei]{SimSun}%设置\rmfamily
 
 \title{\textbf{\zihao{2}模式识别实验报告\\ }}   
-\author{161440110 张涛,1614402 姚韫玉}
+\author{161440110 张涛,1614402 姚韫玉，1614401 高文钊}
 \date{\today}
 
 %links
@@ -81,7 +81,7 @@
 \maketitle
 \begin{abstract}
 模式识别是在某些一定量度或观测基础上把待识模式划分到各自的模式类中去。计算机模式识别就是指利用计算机等装置对物体，图像等信息进行自动的识别。
-实验使用mnist数据集和iris数据集，分类算法使用传统的卷积神经网络模型模型cnn和最近hinton提出的capsule算法。比较两者在mnist数据集上的表现。聚类算法使用k-means和混合高斯分布GMM在iris数据集上做聚类，比较两个算法在此数据集上的表现
+实验使用mnist数据集\cite{mnist}和iris\cite{iris}数据集，分类算法使用传统的卷积神经网络模型模型cnn\cite{lecun1998gradient}和最近hinton提出的capsule架构\cite{sabour2017dynamic}。比较两者在mnist数据集上的表现。聚类算法使用k-means\cite{hartigan1979algorithm}和混合高斯分布GMM\cite{reynolds2015gaussian}在iris数据集上做聚类，比较两个算法在此数据集上的表现
 \end{abstract}
 	%-----------正文
 \section{数据集介绍}
@@ -147,16 +147,138 @@ Iris也称鸢尾花卉数据集，是一类多重变量分析的数据集。通�
 	\subsubsection{GMM}
 	高斯模型就是用高斯概率密度函数（正态分布曲线）精确地量化事物，将一个事物分解为若干的基于高斯概率密度函数（正态分布曲线）形成的模型。
 
-\section{实验结果}
-\textbf{实验环境}:python2.7,pytorch0.4.0,scikit-learn0.19
+\section{实验过程}
+\textbf{实验环境}:python2.7,pytorch0.4.0\cite{pytorch},scikit-learn0.19\cite{scikit-learn}
 
 \textbf{实验数据}:mnist,iris
 
 \textbf{实验方法}:cnn,capsule,k-means,GMM
 \subsection{分类算法实验}
 \subsubsection{convolution neural network}
+\textbf{网络架构：}
+\begin{lstlisting}[language=python]
+Net(
+  (conv1): Conv2d (1, 6, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2))
+  (bn1): BatchNorm2d(6, eps=1e-05, momentum=0.1, affine=True)
+  (pool): MaxPool2d(kernel_size=(2, 2), stride=(2, 2), dilation=(1, 1))
+  (conv2): Conv2d (6, 16, kernel_size=(5, 5), stride=(1, 1), padding=(2, 2))
+  (bn2): BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True)
+  (pool): MaxPool2d(kernel_size=(2, 2), stride=(2, 2), dilation=(1, 1))
+  (fc1): Linear(in_features=784, out_features=120)
+  (fc2): Linear(in_features=120, out_features=84)
+  (fc3): Linear(in_features=84, out_features=10)
+  (softmax):Softmax(out_features=10)
+)
+\end{lstlisting}
 
+在模型中加入了batch normalization,加快了训练的过程．batch size取$1024$,一共运行$300$个epoch,下图是train loss的变化情况
+
+\begin{figure}[htbp]
+	\centering\includegraphics[scale=0.6]{cnn_loss}
+	\caption{cnn在mnist数据集上的train loss}
+\end{figure}
+然后在测试集上做测试：
+accuracy of test:96.82\%
 \subsubsection{capsule}
+capsule是Hinton提出的另一种神经网络架构，其思想就是将特征从传统的一个点转化为一个向量来表示更多的信息．Sabour 2017\cite{sabour2017dynamic}，这篇文章中的主要亮点就是提出了capsNet的结构和dynamic routing的优化算法.下面介绍一下capsnet和优化算法以及pytorch实现过程．
+
+\textbf{conv}:根据图２.3，第一层为传统的卷积层，9*9的kernel,激活函数为relu.
+
+\textbf{capsconv}:第二层是capsconv,也是使用传统的卷积操作进行特征提取，与之前不同的是，会在每一个feature map上做８次不同的卷积操作，然后合并成一个特征map．
+\begin{lstlisting}[language=Python]
+import torch
+import torch.nn as nn
+import utils
+class ConvUnit(nn.Module):
+	def __init__(self, in_channels):
+        super(ConvUnit, self).__init__()
+        self.conv0 = nn.Conv2d(in_channels=in_channels,
+                               out_channels=32,  # fixme constant
+                               kernel_size=9,  # fixme constant
+                               stride=2, # fixme constant
+                               bias=True)
+    def forward(self, x):
+        return self.conv0(x)
+class CapsConv(nn.Module):
+    def __init__(self,in_channels=256,out_dim=8):
+        super(CapsConv,self).__init__()
+        self.in_channels = in_channels
+        self.out_dim = out_dim
+        def create_conv_unit(unit_idx):
+            unit = ConvUnit(in_channels=in_channels)
+            self.add_module("unit_" + str(unit_idx), unit)
+            return unit
+        self.conv = [create_conv_unit(i) for i in range(self.out_dim)]
+    def forward(self,x):
+        #input x with shape ->[batch_size,in_features,height,width]
+        #output with shape->[batch_size,32,6,6]
+        x = [self.conv[i](x) for i in range(self.out_dim)]
+        #output with shape->[batch_size,8,32,6,6]
+        x = torch.stack(x,dim=1)
+        #return shape->[batch_size,1152,8]
+        x = utils.squash(x,dim=2)
+        return x.view(x.size(0),self.out_dim,-1).transpose(1,2)
+\end{lstlisting}
+
+\textbf{capsnet:}第三层进行特征转换从[1152,8]->[10,16],使用全连接，然后使用dynamic routing优化c,直接求mean.
+\begin{lstlisting}
+class CapsNet(nn.Module):
+    """
+    input :a group of capsule -> shape:[batch_size*1152(feature_num)*8(in_dim)]
+    output:a group of new capsule -> shape[batch_size*10(feature_num)*16(out_dim)]
+    """
+    
+    def __init__(self,in_features,out_features,in_dim,out_dim):
+        """
+        """
+        super(CapsNet,self).__init__()
+        #number of output features,10
+        self.out_features = out_features
+        #number of input features,1152
+        self.in_features = in_features
+        #dimension of input capsule
+        self.in_dim = in_dim
+        #dimension of output capsule
+        self.out_dim = out_dim
+        
+        #full connect parameter W with shape [1(batch共享),1152,10,8,16]
+        self.W = nn.Parameter(torch.randn(1,self.in_features,self.out_features,in_dim,out_dim))
+        
+    def forward(self,x):
+        #input x,shape=[batch_size,in_features,in_dim]
+        #[batch_size,1152,8]
+        # (batch, input_features, in_dim) -> (batch, in_features, out_features,1,in_dim)
+        x = torch.stack([x] * self.out_features, dim=2).unsqueeze(3)
+        W = torch.cat([self.W] * conf.batch_size,dim=0)
+        # u_hat shape->(batch_size,in_features,out_features,out_dim)=(batch,1152,10,1,16)
+        u_hat = torch.matmul(x,W)
+        #b for generate weight c,with shape->[1,1152,10,1]
+        b = torch.zeros([1,self.in_features,self.out_features,1]).double()
+        if self.cuda:
+            b = b.cuda()
+        b = Variable(b)
+        for i in range(3):
+            c = F.softmax(b,dim=2)
+            #c shape->[batch_size,1152,10,1,1]
+            c = torch.cat([c] * conf.batch_size, dim=0).unsqueeze(dim=4)
+            #s shape->[batch_size,1,10,1,16]
+            s = (u_hat * c).sum(dim=1,keepdim=True)
+            #output shape->[batch_size,1,10,1,16]
+            v = utils.squash(s,dim=-1)
+            v_1 = torch.cat([v] * self.in_features, dim=1)
+            #(batch,1152,10,1,16)matmul(batch,1152,10,16,1)->(batch,1152,10,1,1)
+            #squeeze
+            #mean->(1,1152,10,1)
+            #print u_hat.shape,v_1.shape
+            update_b = torch.matmul(u_hat,v_1.transpose(3,4)).squeeze(dim=4).mean(dim=0,keepdim=True)
+            b = b+update_b
+        return v.squeeze(1).transpose(2,3)
+\end{lstlisting}
+
+\textbf{最后:}使用separate margin loss，使用bp更新网络中的其他参数．求向量范数作为概率$p(y=y_i)$
+
+\textbf{实验结果:}图是训练过程loss的变化趋势，最终在测试集上的结果为test accuracy:
+
 \subsection{聚类算法实验}
 \subsubsection{k-means}
 \textbf{实验描述：}
